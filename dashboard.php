@@ -10,9 +10,11 @@ if (!isset($_SESSION['username'])) {
 $username = $_SESSION['username'];
 
 // Fetch user data
-$stmt = $conn->prepare("SELECT license_key, created_at FROM users WHERE username = ?");
+$stmt = $conn->prepare("SELECT uid, license_key, created_at FROM users WHERE username = ?");
 $stmt->execute([$username]);
 $userData = $stmt->fetch(PDO::FETCH_ASSOC);
+
+$uid = $userData['uid'] ?? 'N/A';
 $licenseKey = $userData['license_key'] ?? 'N/A';
 $createdAt = $userData['created_at'] ?? 'Unknown';
 
@@ -134,7 +136,15 @@ $changelogs = $changelogStmt->fetchAll(PDO::FETCH_ASSOC);
         background: rgba(0, 0, 0, 0.2);
         border-radius: 5px;
         word-break: break-all;
+        filter: blur(8px);
+        cursor: pointer;
+        transition: filter 0.3s ease-in-out;
     }
+
+    .license-key:hover {
+        filter: blur(0px);
+    }
+
 
     .changelog-item {
         border-left: 3px solid #0d6efd;
@@ -231,8 +241,14 @@ $changelogs = $changelogStmt->fetchAll(PDO::FETCH_ASSOC);
                     <h4 class="mb-0">User Details</h4>
                 </div>
                 <div class="card-body">
+                    <p><strong>UID:</strong>
+                        <span class="user-uid"><?php echo htmlspecialchars($uid); ?></span>
+                    </p>
                     <p><strong>License Key:</strong><br>
-                        <span class="license-key"><?php echo htmlspecialchars($licenseKey); ?></span>
+                        <span class="license-key">
+                            <?php echo htmlspecialchars($licenseKey); ?>
+                        </span>
+                    </p>
                     </p>
                     <p class="mb-0">
                         <i class="bi bi-calendar-check"></i>

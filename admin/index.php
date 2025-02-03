@@ -13,9 +13,13 @@ $statusStmt = $conn->prepare("SELECT value FROM settings WHERE name = 'status'")
 $statusStmt->execute();
 $status = $statusStmt->fetchColumn() ?? 'Offline';
 
-
 $usedKeysStmt = $conn->query("SELECT COUNT(*) FROM license_keys WHERE is_used = 1");
 $totalUsedKeys = $usedKeysStmt->fetchColumn();
+
+// Get login logs
+$stmt = $conn->prepare("SELECT * FROM login_logs ORDER BY login_time DESC");
+$stmt->execute();
+$logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Predefined key formats for dropdown
 $keyFormats = [
@@ -195,10 +199,14 @@ function displayChangelogs($conn) {
               </li>";
     }
 }
+
+
+
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -206,279 +214,17 @@ function displayChangelogs($conn) {
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-:root {
-    --primary-gradient: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-    --card-bg: rgba(255, 255, 255, 0.05);
-    --hover-bg: rgba(255, 255, 255, 0.08);
-    --border-color: rgba(255, 255, 255, 0.1);
-    --text-color: #e5e5e5;
-    --transition: all 0.3s ease;
-    --spacing-sm: 0.5rem;
-    --spacing-md: 1rem;
-    --spacing-lg: 1.5rem;
-    --spacing-xl: 2rem;
-}
-
-/* Base Styles */
-body {
-    font-family: 'Inter', sans-serif;
-    background: var(--primary-gradient);
-    color: var(--text-color);
-    min-height: 100vh;
-    margin: 0;
-    padding: var(--spacing-md);
-}
-
-/* Container */
-.dashboard-container {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 0 var(--spacing-sm);
-}
-
-/* Main Header */
-.main-header {
-    background: var(--card-bg);
-    backdrop-filter: blur(10px);
-    border-radius: 15px;
-    padding: var(--spacing-lg);
-    margin-bottom: var(--spacing-lg);
-    border: 1px solid var(--border-color);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--spacing-md);
-}
-
-/* Grid Layout  */
-/* .grid-container {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: var(--spacing-lg);
-    margin-bottom: var(--spacing-lg);
-} */
-
-/* Cards */
-.dashboard-card {
-    background: var(--card-bg);
-    backdrop-filter: blur(10px);
-    border-radius: 15px;
-    padding: var(--spacing-lg);
-    border: 1px solid var(--border-color);
-    transition: var(--transition);
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-}
-
-.dashboard-card:hover {
-    transform: translateY(-5px);
-    background: var(--hover-bg);
-}
-
-.card-header {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-    margin-bottom: var(--spacing-md);
-    padding-bottom: var(--spacing-md);
-    border-bottom: 1px solid var(--border-color);
-}
-
-/* Tables */
-.table-responsive {
-    background: rgba(0, 0, 0, 0.2);
-    border-radius: 10px;
-    overflow-x: auto;
-    margin: 0 -1rem;
-    padding: 0 1rem;
-    -webkit-overflow-scrolling: touch;
-}
-
-.table {
-    color: var(--text-color);
-    border-color: var(--border-color);
-    margin: 0;
-    min-width: 600px;
-}
-
-.table th,
-.table td {
-    white-space: nowrap;
-    padding: var(--spacing-sm) var(--spacing-md);
-}
-
-/* Badges and Buttons */
-.badge {
-    padding: 0.5rem 1rem;
-    border-radius: 50px;
-    font-weight: 500;
-    white-space: nowrap;
-}
-
-.btn {
-    padding: 0.5rem 1.25rem;
-    border-radius: 8px;
-    font-weight: 500;
-    transition: var(--transition);
-    white-space: nowrap;
-}
-
-.btn:hover {
-    transform: translateY(-2px);
-}
-
-/* Quick Actions */
-.quick-actions {
-    display: flex;
-    gap: var(--spacing-md);
-    flex-wrap: wrap;
-}
-
-.quick-action-btn {
-    flex: 1;
-    min-width: 150px;
-    padding: var(--spacing-md);
-    text-align: center;
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--border-color);
-    color: var(--text-color);
-    transition: var(--transition);
-    text-decoration: none;
-}
-
-.quick-action-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    transform: translateY(-2px);
-    color: var(--text-color);
-}
-
-/* Forms */
-.form-control,
-.form-select {
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid var(--border-color);
-    color: var(--text-color);
-    border-radius: 8px;
-    transition: var(--transition);
-    width: 100%;
-}
-
-.form-control:focus,
-.form-select:focus {
-    background: rgba(0, 0, 0, 0.3);
-    border-color: rgba(255, 255, 255, 0.2);
-    color: var(--text-color);
-    box-shadow: 0 0 0 0.25rem rgba(255, 255, 255, 0.1);
-}
-
-/* Modals */
-.modal-content {
-    background: #1a1a2e;
-    border: 1px solid var(--border-color);
-    border-radius: 15px;
-    color: var(--text-color);
-}
-
-/* Changelog */
-.changelog-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-
-.changelog-item {
-    background: rgba(0, 0, 0, 0.2);
-    transition: var(--transition);
-    padding: var(--spacing-lg);
-    border-radius: 10px;
-    margin-bottom: var(--spacing-md);
-}
-
-.changelog-item:hover {
-    background: rgba(0, 0, 0, 0.3);
-    transform: translateY(-2px);
-}
-
-/* Responsive Breakpoints */
-@media (max-width: 1200px) {
-    .grid-container {
-        grid-template-columns: repeat(2, 1fr);
-    }
-}
-
-@media (max-width: 992px) {
-    :root {
-        --spacing-lg: 1.25rem;
-        --spacing-xl: 1.5rem;
-    }
-    
-    .dashboard-container {
-        padding: 0;
-    }
-}
-
-@media (max-width: 768px) {
-    .grid-container {
-        grid-template-columns: 1fr;
-    }
-    
-    .main-header {
-        flex-direction: column;
-        text-align: center;
-        padding: var(--spacing-md);
-    }
-    
-    .quick-actions {
-        width: 100%;
-        justify-content: center;
-    }
-    
-    .quick-action-btn {
-        min-width: 140px;
-    }
-    
-    body {
-        padding: var(--spacing-sm);
-    }
-}
-
-@media (max-width: 576px) {
-    .card-header {
-        flex-direction: column;
-        text-align: center;
-    }
-    
-    .badge {
-        padding: 0.4rem 0.8rem;
-        font-size: 0.875rem;
-    }
-    
-    .btn {
-        padding: 0.4rem 1rem;
-        font-size: 0.875rem;
-    }
-    
-    .table th,
-    .table td {
-        padding: var(--spacing-sm);
-        font-size: 0.875rem;
-    }
-}
-    </style>
+    <link rel="stylesheet" href="admin.css">
 </head>
 
 <body>
-<div class="dashboard-container">
+    <div class="dashboard-container">
         <!-- Main Header -->
         <div class="main-header">
-            
+
             <div>
                 <h2 class="mb-0">Welcome, <?= htmlspecialchars($_SESSION['username']) ?> 👋</h2>
-                <p class="text-white mb-0">🔑 Total Used Keys: <?= htmlspecialchars($totalUsedKeys) ?></p> 
+                <p class="text-white mb-0">🔑 Total Used Keys: <?= htmlspecialchars($totalUsedKeys) ?></p>
             </div>
             <div class="quick-actions">
                 <button class="quick-action-btn" data-bs-toggle="modal" data-bs-target="#generateKeysModal">
@@ -514,7 +260,7 @@ body {
                     </form>
                 </div>
             </div>
-
+            <br>
             <!-- License Keys Card -->
             <div class="dashboard-card">
                 <div class="card-header">
@@ -524,7 +270,7 @@ body {
                     <?php displayLicenseKeys($conn); ?>
                 </div>
             </div>
-
+            <br>
             <!-- Changelog Card -->
             <div class="dashboard-card">
                 <div class="card-header">
@@ -538,7 +284,49 @@ body {
             </div>
         </div>
     </div>
-    
+<br>
+
+<div class="logs-container">
+
+    <h2 class="logs-title">📜 User Login Logs</h2>
+
+    <!-- 🔍 Search Filter -->
+    <input type="text" id="searchLogs" class="logs-search" placeholder="🔍 Search logs...">
+
+    <div class="table-responsive">
+        <table class="logs-table">
+            <thead>
+                <tr>
+                    <th>Username</th>
+                    <th>Session ID</th>
+                    <th>IP Address</th>
+                    <th>Device</th>
+                    <th>OS</th>
+                    <th>Failed Logins</th>
+                    <th>Login Time</th>
+                </tr>
+            </thead>
+            <tbody id="logsTable">
+                <?php foreach ($logs as $log): ?>
+                    <tr>
+                        <td><?php echo htmlspecialchars($log['username']); ?></td>
+                        <td><?php echo htmlspecialchars($log['session_id']); ?></td>
+                        <td><?php echo htmlspecialchars($log['ip_address']); ?></td>
+                        <td><?php echo htmlspecialchars($log['device_type']); ?></td>
+                        <td><?php echo htmlspecialchars($log['operating_system']); ?></td>
+                        <td class="<?php echo ($log['failed_attempt'] > 0) ? 'failed-login' : ''; ?>">
+                            <?php echo htmlspecialchars($log['failed_attempt']); ?>
+                        </td>
+                        <td><?php echo htmlspecialchars($log['login_time']); ?></td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+
+</div>
+
+
     <!-- Generate License Key Modal -->
     <div class="modal fade" id="generateKeysModal" tabindex="-1" aria-labelledby="generateKeysModalLabel"
         aria-hidden="true">
@@ -712,7 +500,7 @@ body {
                 var button = event.relatedTarget;
                 var keyId = button.getAttribute("data-keyid");
                 var isUsed = button.getAttribute(
-                "data-isused"); // Get the current is_used value (0 or 1)
+                    "data-isused"); // Get the current is_used value (0 or 1)
 
                 document.getElementById("modalKeyId").value = keyId;
 
@@ -765,6 +553,16 @@ body {
         <?php unset($_SESSION['toast_message'], $_SESSION['toast_type']); ?>
         <?php endif; ?>
     });
+
+    document.getElementById("searchLogs").addEventListener("input", function() {
+    let searchValue = this.value.toLowerCase();
+    let rows = document.querySelectorAll("#logsTable tr");
+    
+    rows.forEach(row => {
+        let text = row.textContent.toLowerCase();
+        row.style.display = text.includes(searchValue) ? "" : "none";
+    });
+});
     </script>
 
 </body>

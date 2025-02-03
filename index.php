@@ -2,6 +2,41 @@
 session_start();
 require_once 'config.php';
 
+// Function to get user's IP address
+function getUserIP() {
+    if (!empty($_SERVER['HTTP_CLIENT_IP'])) {
+        return $_SERVER['HTTP_CLIENT_IP'];
+    } elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+        return $_SERVER['HTTP_X_FORWARDED_FOR'];
+    } else {
+        return $_SERVER['REMOTE_ADDR'];
+    }
+}
+
+// Function to get user's browser details
+function getUserAgent() {
+    return $_SERVER['HTTP_USER_AGENT'];
+}
+
+// Function to detect device type
+function getDeviceType() {
+    $agent = strtolower($_SERVER['HTTP_USER_AGENT']);
+    if (strpos($agent, 'mobile') !== false) return 'Mobile';
+    elseif (strpos($agent, 'tablet') !== false) return 'Tablet';
+    else return 'Desktop';
+}
+
+// Function to detect OS
+function getOperatingSystem() {
+    $agent = strtolower($_SERVER['HTTP_USER_AGENT']);
+    if (strpos($agent, 'windows') !== false) return 'Windows';
+    elseif (strpos($agent, 'mac') !== false) return 'MacOS';
+    elseif (strpos($agent, 'linux') !== false) return 'Linux';
+    elseif (strpos($agent, 'android') !== false) return 'Android';
+    elseif (strpos($agent, 'iphone') !== false) return 'iOS';
+    else return 'Unknown';
+}
+
 // 🚀 Redirect logged-in users
 if (isset($_SESSION['username'])) {
     header("Location: " . ($_SESSION['is_admin'] ? './admin/index.php' : 'dashboard.php'));
@@ -13,6 +48,13 @@ $error = ''; // Initialize error variable to prevent undefined warnings
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['username']);
     $password = $_POST['password'];
+    $ip_address = getUserIP();
+    $user_agent = getUserAgent();
+    $device_type = getDeviceType();
+    $operating_system = getOperatingSystem();
+    $session_id = session_id();
+    $cookies = json_encode($_COOKIE); // Save cookies as JSON
+    $failed_attempts = 0;
 
     if (isset($_POST['register'])) {
         $licenseKey = trim($_POST['license_key']);
@@ -47,18 +89,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute([$username]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if ($user && password_verify($password, $user['password'])) {
-            $_SESSION['username'] = $username;
-            $_SESSION['is_admin'] = (int) $user['is_admin']; // Ensure it is properly set as integer
+        if ($user) {
+            // Check if account is banned/suspended
+            if ($user['status'] != 'Active') {
+                $error = '<div class="alert alert-danger">Your account is ' . htmlspecialchars($user['status']) . '.</div>';
+            }
+            // Check if user has exceeded login attempts
+            elseif ($user['failed_login_attempts'] >= 5) {
+                $error = '<div class="alert alert-danger">Too many failed login attempts. Try again later.</div>';
+            } 
+            elseif (password_verify($password, $user['password'])) {
+                $_SESSION['username'] = $username;
+                $_SESSION['is_admin'] = (int) $user['is_admin']; // Ensure it is properly set as integer
 
-            header("Location: " . ($_SESSION['is_admin'] ? './admin/index.php' : 'dashboard.php'));
-            exit;
+                // ✅ Log Successful Login
+                $logStmt = $conn->prepare("INSERT INTO login_logs (username, session_id, ip_address, user_agent, device_type, operating_system, cookies) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                $logStmt->execute([$username, $session_id, $ip_address, $user_agent, $device_type, $operating_system, $cookies]);
+
+                // ✅ Reset failed attempts & update last login
+                $conn->prepare("UPDATE users SET failed_login_attempts = 0, last_login = NOW() WHERE username = ?")->execute([$username]);
+
+                header("Location: " . ($_SESSION['is_admin'] ? './admin/index.php' : 'dashboard.php'));
+                exit;
+            } else {
+                // Log failed attempt
+                $failed_attempts = $user['failed_login_attempts'] + 1;
+                $conn->prepare("UPDATE users SET failed_login_attempts = ? WHERE username = ?")->execute([$failed_attempts, $username]);
+
+                $logStmt = $conn->prepare("INSERT INTO login_logs (username, session_id, ip_address, user_agent, device_type, operating_system, cookies, failed_attempt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+                $logStmt->execute([$username, $session_id, $ip_address, $user_agent, $device_type, $operating_system, $cookies, $failed_attempts]);
+
+                $error = '<div class="alert alert-danger">Invalid username or password.</div>';
+            }
         } else {
             $error = '<div class="alert alert-danger">Invalid username or password.</div>';
         }
     }
 }
 ?>
+
 
 
 <!DOCTYPE html>
