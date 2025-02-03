@@ -23,9 +23,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($key) {
             $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
-            $stmt = $conn->prepare("INSERT INTO users (username, password, license_key) VALUES (?, ?, ?)");
 
-            if ($stmt->execute([$username, $hashedPassword, $licenseKey])) {
+            // ✅ Get the next UID (Sequential number)
+            $stmt = $conn->prepare("SELECT MAX(uid) AS max_uid FROM users");
+            $stmt->execute();
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            $nextUid = $result['max_uid'] ? $result['max_uid'] + 1 : 1; // Start from 1 if empty
+
+            // ✅ Insert user with UID
+            $stmt = $conn->prepare("INSERT INTO users (uid, username, password, license_key) VALUES (?, ?, ?, ?)");
+
+            if ($stmt->execute([$nextUid, $username, $hashedPassword, $licenseKey])) {
                 $conn->prepare("UPDATE license_keys SET is_used = 1 WHERE id = ?")->execute([$key['id']]);
                 $error = '<div class="alert alert-success">User registered successfully. Please log in.</div>';
             } else {
@@ -51,6 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 ?>
+
 
 <!DOCTYPE html>
 <html lang="en">
